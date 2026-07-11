@@ -11,8 +11,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/pkg/browser"
 )
 
 func main() {
@@ -100,7 +101,7 @@ func getWGPrivkey(stdin *bufio.Reader, prompt bool) (*ecdh.PrivateKey, error) {
 func getJWTToken(stdin *bufio.Reader, team string) (string, error) {
 	loginURL := "https://" + team + ".cloudflareaccess.com/warp"
 	fmt.Fprintf(os.Stderr, "Opening %s — log in there.\n", loginURL)
-	if err := openBrowser(loginURL); err != nil {
+	if err := browser.OpenURL(loginURL); err != nil {
 		fmt.Fprintf(os.Stderr, "(could not open a browser: %v; open the URL manually)\n", err)
 	}
 	fmt.Fprintln(os.Stderr, "After login, open the browser console (F12) on the success page and run:")
@@ -136,22 +137,4 @@ func extractToken(input string) (string, error) {
 func isJWTChar(r rune) bool {
 	return 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' ||
 		r == '.' || r == '_' || r == '-'
-}
-
-// openBrowser opens the URL with the first launcher available: wslview (WSL),
-// xdg-open (Linux), open (macOS), or cmd.exe (Windows path on WSL without wslu).
-func openBrowser(url string) error {
-	for _, opener := range [][]string{
-		{"wslview"},
-		{"xdg-open"},
-		{"open"},
-		{"cmd.exe", "/c", "start"},
-	} {
-		path, err := exec.LookPath(opener[0])
-		if err != nil {
-			continue
-		}
-		return exec.Command(path, append(opener[1:], url)...).Start()
-	}
-	return errors.New("no launcher found")
 }
