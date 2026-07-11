@@ -21,8 +21,8 @@ copy the `com.cloudflare.warp://...?token=...` URL from the `<meta>` tag in
 `<head>`. Paste the URL (or just the token) into the prompt; the tool registers
 a new device and prints a wg-quick(8) profile to stdout.
 
-The token expires quickly — paste it promptly. If registration fails, refresh
-the success page and copy a fresh one.
+The token expires 60 seconds after login — paste it promptly. If registration
+fails with an expiry error, refresh the success page and copy a fresh one.
 
 Pass `-p` / `--prompt` to supply your own WireGuard private key instead of
 generating one.
