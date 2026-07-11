@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -36,7 +38,8 @@ type warpConfig struct {
 	Peers    []struct {
 		PublicKey []byte `json:"public_key"`
 		Endpoint  struct {
-			Host string `json:"host"`
+			Host  string `json:"host"`
+			Ports []int  `json:"ports"`
 		} `json:"endpoint"`
 	} `json:"peers"`
 	Interface struct {
@@ -115,8 +118,25 @@ func (c *warpConfig) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardConfig, err
 		V4:         addrs.V4,
 		V6:         addrs.V6,
 		Endpoint:   peer.Endpoint.Host,
+		AltPorts:   altEndpointPorts(peer.Endpoint.Host, peer.Endpoint.Ports),
 		RoutingID:  [3]byte(c.ClientID),
 	}, nil
+}
+
+// altEndpointPorts returns the advertised endpoint ports, excluding the one
+// already used by the endpoint host.
+func altEndpointPorts(host string, ports []int) []int {
+	_, current, err := net.SplitHostPort(host)
+	if err != nil {
+		current = ""
+	}
+	var alt []int
+	for _, p := range ports {
+		if strconv.Itoa(p) != current {
+			alt = append(alt, p)
+		}
+	}
+	return alt
 }
 
 func prettyJSON(raw []byte) string {
