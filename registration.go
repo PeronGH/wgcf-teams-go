@@ -34,8 +34,7 @@ type response struct {
 type registrationResult struct {
 	ID      string `json:"id"`
 	Account struct {
-		ID      string `json:"id"`
-		License string `json:"license"`
+		ID string `json:"id"`
 	} `json:"account"`
 	Token  string     `json:"token"`
 	Config warpConfig `json:"config"`
@@ -141,11 +140,6 @@ func (r *registrationResult) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardCon
 		return nil, fmt.Errorf("invalid v6 endpoint %q: %w", peer.Endpoint.V6, err)
 	}
 
-	license := r.Account.License
-	if license == "" {
-		license = "N/A"
-	}
-
 	return &wireGuardConfig{
 		PrivateKey:    privkey.Bytes(),
 		OwnPublicKey:  privkey.PublicKey().Bytes(),
@@ -153,7 +147,6 @@ func (r *registrationResult) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardCon
 		V6:            addrs.V6,
 		DeviceID:      r.ID,
 		AccountID:     r.Account.ID,
-		License:       license,
 		Token:         r.Token,
 		ClientID:      [3]byte(c.ClientID),
 		PeerPublicKey: peer.PublicKey,

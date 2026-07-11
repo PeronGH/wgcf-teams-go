@@ -72,26 +72,21 @@ Address = 100.96.0.3, 2606:4700:cf1:1000::3
 DNS = 1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001
 MTU = 1280
 
-# Cloudflare Warp specific variables
-#CFDeviceId = t.00000000-0000-0000-0000-000000000000
-#CFAccountId = 00000000000000000000000000000000
-#CFAccountLicense = N/A
-#CFToken = 00000000-0000-0000-0000-000000000000
-## Cloudflare Client ID in various formats.
-## NOTE: this is also referred to as "reserved key" as the client ID
-##       is put in the reserved field in the WireGuard header.
-#CFClientIdB64 = AQID
-#CFClientIdHex = 0x010203
-#CFClientIdDec = [1, 2, 3]
+# Cloudflare device metadata; the client id is what warp writes into
+# the reserved bytes of the wireguard message header.
+#DeviceId = t.00000000-0000-0000-0000-000000000000
+#AccountId = 00000000000000000000000000000000
+#ApiToken = 00000000-0000-0000-0000-000000000000
+#ClientId = AQID (hex 0x010203, decimal [1, 2, 3])
 
 [Peer]
 PublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25
-# If UDP 2408 is blocked, you could try UDP 500, UDP 1701, or UDP 4500.
 Endpoint = 162.159.193.6:2408
 #Endpoint = [2606:4700:100::a29f:c106]:2408
 #Endpoint = engage.cloudflareclient.com:2408
+# the endpoint also listens on UDP 500, 1701, 4500
 `
 
 func TestResponseToWGProfile(t *testing.T) {
