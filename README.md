@@ -19,10 +19,11 @@ After you log in, the success page holds the enrollment token. Open the
 browser console (F12) and run:
 
 ```js
-document.getElementById('redirect-button').getAttribute('onclick')
+copy(document.getElementById('redirect-button').getAttribute('onclick'))
 ```
 
-Paste the output into the prompt — the token is extracted automatically
+That copies the login callback to the clipboard via the console's `copy()`
+helper. Paste it into the prompt — the token is extracted automatically
 (pasting the `com.cloudflare.warp://...?token=...` URL or the bare token works
 too). The tool then registers a new device and prints a wg-quick(8) profile to
 stdout. Comments in the profile carry everything else worth keeping: your

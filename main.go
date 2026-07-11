@@ -105,8 +105,8 @@ func getJWTToken(stdin *bufio.Reader, team string) (string, error) {
 		fmt.Fprintf(os.Stderr, "(could not open a browser: %v; open the URL manually)\n", err)
 	}
 	fmt.Fprintln(os.Stderr, "After login, open the browser console (F12) on the success page and run:")
-	fmt.Fprintln(os.Stderr, "  document.getElementById('redirect-button').getAttribute('onclick')")
-	fmt.Fprintln(os.Stderr, "Paste the output here within 60 seconds and press enter:")
+	fmt.Fprintln(os.Stderr, "  copy(document.getElementById('redirect-button').getAttribute('onclick'))")
+	fmt.Fprintln(os.Stderr, "That puts the login callback on your clipboard; paste it here within 60 seconds and press enter:")
 	line, err := stdin.ReadString('\n')
 	if err != nil {
 		return "", err
