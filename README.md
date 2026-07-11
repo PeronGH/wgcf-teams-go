@@ -1,10 +1,8 @@
 # wgcf-teams-go
 
-Extract WireGuard configurations from Cloudflare's WARP for Teams.
+Generate WireGuard configurations for Cloudflare WARP for Teams (Zero Trust).
 
-A dependency-free Go port of [poscat0x04/wgcf-teams](https://github.com/poscat0x04/wgcf-teams).
-
-## Installing
+## Install
 
 ```
 go install github.com/PeronGH/wgcf-teams-go@latest
@@ -13,13 +11,18 @@ go install github.com/PeronGH/wgcf-teams-go@latest
 ## Usage
 
 ```
-wgcf-teams-go [-p] > wg.conf
+wgcf-teams-go > wg.conf
 ```
 
-The program asks for the JWT token of your organization on stderr; see
-[guide.md](guide.md) for where to find it after logging in to
-`https://<your-org>.cloudflareaccess.com/warp`. The WireGuard profile is
-printed to stdout.
+The tool registers a new device with your Zero Trust organization and prints a
+wg-quick(8) profile to stdout; prompts go to stderr. Pass `-p` / `--prompt` to
+supply your own WireGuard private key instead of generating one.
 
-Pass `-p` / `--prompt` to supply your own WireGuard private key instead of
-generating one.
+## Obtaining the JWT token
+
+1. Open `https://<your-team>.cloudflareaccess.com/warp` in a browser and
+   complete the login.
+2. On the page shown after login, open the developer tools and inspect the
+   `<head>` element. It contains a `<meta>` tag with a very long URL ending in
+   `?token=eyJ...`.
+3. Copy everything after `?token=` and paste it into the tool's prompt.

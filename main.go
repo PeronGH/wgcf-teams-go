@@ -1,5 +1,5 @@
-// Command wgcf-teams extracts WireGuard configurations from Cloudflare's
-// WARP for Teams. It is a Go port of https://github.com/poscat0x04/wgcf-teams.
+// Command wgcf-teams-go registers a device with Cloudflare WARP for Teams
+// (Zero Trust) and prints a WireGuard configuration for it.
 package main
 
 import (
@@ -13,12 +13,10 @@ import (
 	"strings"
 )
 
-const instructionURL = "https://github.com/PeronGH/wgcf-teams-go/blob/main/guide.md"
-
 func main() {
 	var prompt bool
-	flag.BoolVar(&prompt, "p", false, "prompt for wireguard private key instead of randomly generating one")
-	flag.BoolVar(&prompt, "prompt", false, "prompt for wireguard private key instead of randomly generating one")
+	flag.BoolVar(&prompt, "p", false, "prompt for a wireguard private key instead of generating one")
+	flag.BoolVar(&prompt, "prompt", false, "prompt for a wireguard private key instead of generating one")
 	flag.Parse()
 
 	if err := run(prompt); err != nil {
@@ -36,7 +34,7 @@ func run(prompt bool) error {
 	}
 	token, err := getJWTToken(stdin)
 	if err != nil {
-		return fmt.Errorf("failed to get jwt token: %w", err)
+		return fmt.Errorf("failed to read jwt token: %w", err)
 	}
 
 	wgConfig, err := register(privkey, token)
@@ -44,7 +42,7 @@ func run(prompt bool) error {
 		return err
 	}
 
-	fmt.Println(wgConfig)
+	fmt.Print(wgConfig)
 	return nil
 }
 
@@ -52,7 +50,7 @@ func getWGPrivkey(stdin *bufio.Reader, prompt bool) (*ecdh.PrivateKey, error) {
 	if !prompt {
 		return ecdh.X25519().GenerateKey(rand.Reader)
 	}
-	fmt.Fprintln(os.Stderr, "Please paste your wireguard private key and press enter:")
+	fmt.Fprintln(os.Stderr, "Paste your wireguard private key and press enter:")
 	line, err := stdin.ReadString('\n')
 	if err != nil {
 		return nil, fmt.Errorf("failed to read from stdin: %w", err)
@@ -69,7 +67,8 @@ func getWGPrivkey(stdin *bufio.Reader, prompt bool) (*ecdh.PrivateKey, error) {
 }
 
 func getJWTToken(stdin *bufio.Reader) (string, error) {
-	fmt.Fprintln(os.Stderr, "Please open https://<YOUR_ORGANIZATION>.cloudflareaccess.com/warp, log in to warp, paste the JWT token here and press enter.")
-	fmt.Fprintf(os.Stderr, "For a detailed instruction on where to find the JWT token after login, see %s.\n", instructionURL)
+	fmt.Fprintln(os.Stderr, "Open https://<your-team>.cloudflareaccess.com/warp and log in.")
+	fmt.Fprintln(os.Stderr, `Then view the page source: <head> contains a <meta> tag with a long URL; copy the part after "?token=" (starts with "eyJ"). See the README for details.`)
+	fmt.Fprintln(os.Stderr, "Paste the token here and press enter:")
 	return stdin.ReadString('\n')
 }
