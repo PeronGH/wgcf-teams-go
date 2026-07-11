@@ -10,7 +10,12 @@ func TestExtractToken(t *testing.T) {
 	}{
 		{"bare token", "eyJhbGciOiJSUzI1NiJ9.payload.sig\n", "eyJhbGciOiJSUzI1NiJ9.payload.sig"},
 		{"callback URL", "com.cloudflare.warp://example.cloudflareaccess.com/auth?token=eyJfoo\n", "eyJfoo"},
-		{"https URL with token", "https://example.com/x?a=1&token=eyJbar", "eyJbar"},
+		{"URL with token mid-query", "https://example.com/x?a=1&token=eyJbar&b=2", "eyJbar"},
+		{
+			"redirect button onclick",
+			"location.href = 'com.cloudflare.warp://example.cloudflareaccess.com/auth?token=eyJhbGc.pay_lo-ad.sig';\n",
+			"eyJhbGc.pay_lo-ad.sig",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

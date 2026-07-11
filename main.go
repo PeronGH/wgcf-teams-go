@@ -10,7 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -104,8 +103,9 @@ func getJWTToken(stdin *bufio.Reader, team string) (string, error) {
 	if err := openBrowser(loginURL); err != nil {
 		fmt.Fprintf(os.Stderr, "(could not open a browser: %v; open the URL manually)\n", err)
 	}
-	fmt.Fprintln(os.Stderr, `After login, the success page asks to open the WARP app. Decline, view the page source instead, and copy the "com.cloudflare.warp://...?token=..." URL from the <meta> tag in <head>.`)
-	fmt.Fprintln(os.Stderr, "Paste that URL (or just the token) here and press enter:")
+	fmt.Fprintln(os.Stderr, "After login, open the browser console (F12) on the success page and run:")
+	fmt.Fprintln(os.Stderr, "  document.getElementById('redirect-button').getAttribute('onclick')")
+	fmt.Fprintln(os.Stderr, "Paste the output here within 60 seconds and press enter:")
 	line, err := stdin.ReadString('\n')
 	if err != nil {
 		return "", err
@@ -113,19 +113,29 @@ func getJWTToken(stdin *bufio.Reader, team string) (string, error) {
 	return extractToken(line)
 }
 
-// extractToken accepts either a bare JWT or the full com.cloudflare.warp://
-// callback URL from the login success page.
+// extractToken pulls the JWT out of whatever was pasted: a bare token, the
+// com.cloudflare.warp:// callback URL, or the login page's whole redirect
+// onclick attribute containing that URL.
 func extractToken(input string) (string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return "", errors.New("no token provided")
 	}
-	if u, err := url.Parse(input); err == nil {
-		if token := u.Query().Get("token"); token != "" {
+	if i := strings.Index(input, "token="); i >= 0 {
+		token := input[i+len("token="):]
+		if j := strings.IndexFunc(token, func(r rune) bool { return !isJWTChar(r) }); j >= 0 {
+			token = token[:j]
+		}
+		if token != "" {
 			return token, nil
 		}
 	}
 	return input, nil
+}
+
+func isJWTChar(r rune) bool {
+	return 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' ||
+		r == '.' || r == '_' || r == '-'
 }
 
 // openBrowser opens the URL with the first launcher available: wslview (WSL),

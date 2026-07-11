@@ -15,13 +15,19 @@ wgcf-teams-go <team-name> > wg.conf
 ```
 
 The tool opens `https://<team-name>.cloudflareaccess.com/warp` in your browser.
-After you log in, the success page tries to launch the WARP client via a
-`com.cloudflare.warp://` link — decline that, view the page source instead, and
-copy the `com.cloudflare.warp://...?token=...` URL from the `<meta>` tag in
-`<head>`. Paste the URL (or just the token) into the prompt; the tool registers
-a new device and prints a wg-quick(8) profile to stdout. Comments in the
-profile carry the routing id and the alternative endpoint ports advertised by
-Cloudflare (useful when the default UDP port is blocked).
+After you log in, the success page holds the enrollment token. Open the
+browser console (F12) and run:
+
+```js
+document.getElementById('redirect-button').getAttribute('onclick')
+```
+
+Paste the output into the prompt — the token is extracted automatically
+(pasting the `com.cloudflare.warp://...?token=...` URL or the bare token works
+too). The tool then registers a new device and prints a wg-quick(8) profile to
+stdout. Comments in the profile carry the routing id and the alternative
+endpoint ports advertised by Cloudflare (useful when the default UDP port is
+blocked).
 
 The token expires 60 seconds after login — paste it promptly. If registration
 fails with an expiry error, refresh the success page and copy a fresh one.
