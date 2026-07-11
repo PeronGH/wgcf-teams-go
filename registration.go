@@ -28,9 +28,17 @@ type registration struct {
 // response is the subset of the Cloudflare API response the tool uses.
 // Result is null when the request fails.
 type response struct {
-	Result *struct {
-		Config warpConfig `json:"config"`
-	} `json:"result"`
+	Result *registrationResult `json:"result"`
+}
+
+type registrationResult struct {
+	ID      string `json:"id"`
+	Account struct {
+		ID      string `json:"id"`
+		License string `json:"license"`
+	} `json:"account"`
+	Token  string     `json:"token"`
+	Config warpConfig `json:"config"`
 }
 
 type warpConfig struct {
@@ -39,6 +47,8 @@ type warpConfig struct {
 		PublicKey []byte `json:"public_key"`
 		Endpoint  struct {
 			Host  string `json:"host"`
+			V4    string `json:"v4"`
+			V6    string `json:"v6"`
 			Ports []int  `json:"ports"`
 		} `json:"endpoint"`
 	} `json:"peers"`
@@ -93,10 +103,11 @@ func register(privkey *ecdh.PrivateKey, token string) (*wireGuardConfig, error) 
 	if envelope.Result == nil {
 		return nil, fmt.Errorf("cloudflare API request failed (HTTP %s):\n%s", resp.Status, prettyJSON(raw))
 	}
-	return envelope.Result.Config.toWGConfig(privkey)
+	return envelope.Result.toWGConfig(privkey)
 }
 
-func (c *warpConfig) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardConfig, error) {
+func (r *registrationResult) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardConfig, error) {
+	c := &r.Config
 	if len(c.Peers) == 0 {
 		return nil, fmt.Errorf("cloudflare returned a config with no peers")
 	}
@@ -112,14 +123,44 @@ func (c *warpConfig) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardConfig, err
 		return nil, fmt.Errorf("unexpected interface address families: v4=%s v6=%s", addrs.V4, addrs.V6)
 	}
 
+	// The v4/v6 endpoints come with port 0; the real port is in the host.
+	_, portStr, err := net.SplitHostPort(peer.Endpoint.Host)
+	if err != nil {
+		return nil, fmt.Errorf("endpoint host %q has no port: %w", peer.Endpoint.Host, err)
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("endpoint host %q has an invalid port: %w", peer.Endpoint.Host, err)
+	}
+	endpointV4, err := netip.ParseAddrPort(peer.Endpoint.V4)
+	if err != nil {
+		return nil, fmt.Errorf("invalid v4 endpoint %q: %w", peer.Endpoint.V4, err)
+	}
+	endpointV6, err := netip.ParseAddrPort(peer.Endpoint.V6)
+	if err != nil {
+		return nil, fmt.Errorf("invalid v6 endpoint %q: %w", peer.Endpoint.V6, err)
+	}
+
+	license := r.Account.License
+	if license == "" {
+		license = "N/A"
+	}
+
 	return &wireGuardConfig{
-		PrivateKey: privkey.Bytes(),
-		PublicKey:  peer.PublicKey,
-		V4:         addrs.V4,
-		V6:         addrs.V6,
-		Endpoint:   peer.Endpoint.Host,
-		AltPorts:   altEndpointPorts(peer.Endpoint.Host, peer.Endpoint.Ports),
-		RoutingID:  [3]byte(c.ClientID),
+		PrivateKey:    privkey.Bytes(),
+		OwnPublicKey:  privkey.PublicKey().Bytes(),
+		V4:            addrs.V4,
+		V6:            addrs.V6,
+		DeviceID:      r.ID,
+		AccountID:     r.Account.ID,
+		License:       license,
+		Token:         r.Token,
+		ClientID:      [3]byte(c.ClientID),
+		PeerPublicKey: peer.PublicKey,
+		EndpointV4:    netip.AddrPortFrom(endpointV4.Addr(), uint16(port)),
+		EndpointV6:    netip.AddrPortFrom(endpointV6.Addr(), uint16(port)),
+		EndpointHost:  peer.Endpoint.Host,
+		AltPorts:      altEndpointPorts(peer.Endpoint.Host, peer.Endpoint.Ports),
 	}, nil
 }
 

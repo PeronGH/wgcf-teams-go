@@ -14,6 +14,13 @@ const testResponse = `
   "result": {
     "id": "t.00000000-0000-0000-0000-000000000000",
     "physical_device_id": "00000000-0000-0000-0000-000000000000",
+    "account": {
+      "id": "00000000000000000000000000000000",
+      "account_type": "team",
+      "managed": "not_api_managed",
+      "organization": "example"
+    },
+    "token": "00000000-0000-0000-0000-000000000000",
     "version": "6.23",
     "policy": {
       "policy_id": "default",
@@ -58,21 +65,33 @@ const testResponse = `
 }
 `
 
-const expectedProfile = `# routing-id: 0x010203
-[Interface]
+const expectedProfile = `[Interface]
 PrivateKey = AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
-Address = 100.96.0.3/32
-Address = 2606:4700:cf1:1000::3/128
-DNS = 1.1.1.1
-DNS = 2606:4700:4700::1111
-MTU = 1420
+#PublicKey = j0DFrbaPJWJK5bIU6nZ6bslNgp09e14a0bpvPiE4KF8=
+Address = 100.96.0.3, 2606:4700:cf1:1000::3
+DNS = 1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001
+MTU = 1280
+
+# Cloudflare Warp specific variables
+#CFDeviceId = t.00000000-0000-0000-0000-000000000000
+#CFAccountId = 00000000000000000000000000000000
+#CFAccountLicense = N/A
+#CFToken = 00000000-0000-0000-0000-000000000000
+## Cloudflare Client ID in various formats.
+## NOTE: this is also referred to as "reserved key" as the client ID
+##       is put in the reserved field in the WireGuard header.
+#CFClientIdB64 = AQID
+#CFClientIdHex = 0x010203
+#CFClientIdDec = [1, 2, 3]
 
 [Peer]
 PublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
-AllowedIPs = 0.0.0.0/0
-AllowedIPs = ::/0
-Endpoint = engage.cloudflareclient.com:2408
-# alternative endpoint ports: 500, 1701, 4500
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25
+# If UDP 2408 is blocked, you could try UDP 500, UDP 1701, or UDP 4500.
+Endpoint = 162.159.193.6:2408
+#Endpoint = [2606:4700:100::a29f:c106]:2408
+#Endpoint = engage.cloudflareclient.com:2408
 `
 
 func TestResponseToWGProfile(t *testing.T) {
@@ -93,7 +112,7 @@ func TestResponseToWGProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	wgConfig, err := envelope.Result.Config.toWGConfig(privkey)
+	wgConfig, err := envelope.Result.toWGConfig(privkey)
 	if err != nil {
 		t.Fatalf("failed to convert to wireguard config: %v", err)
 	}

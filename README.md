@@ -25,9 +25,10 @@ document.getElementById('redirect-button').getAttribute('onclick')
 Paste the output into the prompt — the token is extracted automatically
 (pasting the `com.cloudflare.warp://...?token=...` URL or the bare token works
 too). The tool then registers a new device and prints a wg-quick(8) profile to
-stdout. Comments in the profile carry the routing id and the alternative
-endpoint ports advertised by Cloudflare (useful when the default UDP port is
-blocked).
+stdout. Comments in the profile carry everything else worth keeping: your
+public key, the device/account ids and device API token, the client id
+(reserved key) in base64/hex/decimal, and alternative endpoints and ports
+advertised by Cloudflare.
 
 The token expires 60 seconds after login — paste it promptly. If registration
 fails with an expiry error, refresh the success page and copy a fresh one.
