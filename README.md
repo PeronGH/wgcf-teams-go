@@ -11,18 +11,23 @@ go install github.com/PeronGH/wgcf-teams-go@latest
 ## Usage
 
 ```
-wgcf-teams-go > wg.conf
+wgcf-teams-go <team-name> > wg.conf
 ```
 
-The tool registers a new device with your Zero Trust organization and prints a
-wg-quick(8) profile to stdout; prompts go to stderr. Pass `-p` / `--prompt` to
-supply your own WireGuard private key instead of generating one.
+The tool opens `https://<team-name>.cloudflareaccess.com/warp` in your browser.
+After you log in, the success page tries to launch the WARP client via a
+`com.cloudflare.warp://` link — decline that, view the page source instead, and
+copy the `com.cloudflare.warp://...?token=...` URL from the `<meta>` tag in
+`<head>`. Paste the URL (or just the token) into the prompt; the tool registers
+a new device and prints a wg-quick(8) profile to stdout.
 
-## Obtaining the JWT token
+The token expires quickly — paste it promptly. If registration fails, refresh
+the success page and copy a fresh one.
 
-1. Open `https://<your-team>.cloudflareaccess.com/warp` in a browser and
-   complete the login.
-2. On the page shown after login, open the developer tools and inspect the
-   `<head>` element. It contains a `<meta>` tag with a very long URL ending in
-   `?token=eyJ...`.
-3. Copy everything after `?token=` and paste it into the tool's prompt.
+Pass `-p` / `--prompt` to supply your own WireGuard private key instead of
+generating one.
+
+> An automatic, paste-free flow is not possible: Cloudflare delivers the token
+> only through the fixed `com.cloudflare.warp://` custom URL scheme, which the
+> browser hands to the OS-registered protocol handler (the official WARP
+> client), never to a local HTTP callback.
