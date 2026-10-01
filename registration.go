@@ -50,7 +50,8 @@ type registrationResult struct {
 type warpConfig struct {
 	ClientID []byte `json:"client_id"`
 	Peers    []struct {
-		PublicKey []byte `json:"public_key"`
+		// Base64 of the raw key for wireguard, a PEM block for masque.
+		PublicKey string `json:"public_key"`
 		Endpoint  struct {
 			Host  string   `json:"host"`
 			V4    string   `json:"v4"`
@@ -66,14 +67,14 @@ type warpConfig struct {
 	} `json:"interface"`
 }
 
-// register posts a device registration to the Cloudflare API and converts the
-// response into a WireGuard config.
-func register(privkey *ecdh.PrivateKey, token string) (*wireGuardConfig, error) {
+// register posts a device registration for the given base64 public key to
+// the Cloudflare API.
+func register(pubKey, keyType, tunnelType, token string) (*registrationResult, error) {
 	reg := registration{
 		Type:             "linux",
-		Key:              base64.StdEncoding.EncodeToString(privkey.PublicKey().Bytes()),
-		KeyType:          "curve25519",
-		TunnelType:       "wireguard",
+		Key:              pubKey,
+		KeyType:          keyType,
+		TunnelType:       tunnelType,
 		Tos:              time.Now().UTC().Format(time.RFC3339),
 		MultiUserEnabled: true,
 	}
@@ -110,7 +111,7 @@ func register(privkey *ecdh.PrivateKey, token string) (*wireGuardConfig, error) 
 	if envelope.Result == nil {
 		return nil, fmt.Errorf("cloudflare API request failed (HTTP %s):\n%s", resp.Status, prettyJSON(raw))
 	}
-	return envelope.Result.toWGConfig(privkey)
+	return envelope.Result, nil
 }
 
 func (r *registrationResult) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardConfig, error) {
@@ -119,8 +120,9 @@ func (r *registrationResult) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardCon
 		return nil, fmt.Errorf("cloudflare returned a config with no peers")
 	}
 	peer := c.Peers[0]
-	if len(peer.PublicKey) != 32 {
-		return nil, fmt.Errorf("peer public key is not 32 bytes: %q", base64.StdEncoding.EncodeToString(peer.PublicKey))
+	peerKey, err := base64.StdEncoding.DecodeString(peer.PublicKey)
+	if err != nil || len(peerKey) != 32 {
+		return nil, fmt.Errorf("peer public key is not a base64 32-byte key: %q", peer.PublicKey)
 	}
 	if len(c.ClientID) != 3 {
 		return nil, fmt.Errorf("client id is not 3 bytes: %q", base64.StdEncoding.EncodeToString(c.ClientID))
@@ -155,7 +157,7 @@ func (r *registrationResult) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardCon
 		AccountID:     r.Account.ID,
 		Token:         r.Token,
 		ClientID:      [3]byte(c.ClientID),
-		PeerPublicKey: peer.PublicKey,
+		PeerPublicKey: peerKey,
 		EndpointV4:    netip.AddrPortFrom(endpointV4.Addr(), port),
 		EndpointV6:    netip.AddrPortFrom(endpointV6.Addr(), port),
 		EndpointHost:  peer.Endpoint.Host,

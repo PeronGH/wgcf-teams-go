@@ -1,12 +1,16 @@
 // Command wgcf-teams-go registers a device with Cloudflare WARP for Teams
-// (Zero Trust) and prints a WireGuard configuration for it.
+// (Zero Trust) and prints a WireGuard or MASQUE configuration for it.
 package main
 
 import (
 	"bufio"
 	"crypto/ecdh"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,11 +21,13 @@ import (
 )
 
 func main() {
-	var prompt bool
-	flag.BoolVar(&prompt, "p", false, "prompt for a wireguard private key instead of generating one")
-	flag.BoolVar(&prompt, "prompt", false, "prompt for a wireguard private key instead of generating one")
+	var prompt, masque bool
+	flag.BoolVar(&prompt, "p", false, "prompt for a private key instead of generating one")
+	flag.BoolVar(&prompt, "prompt", false, "prompt for a private key instead of generating one")
+	flag.BoolVar(&masque, "m", false, "register a MASQUE tunnel and print a usque config.json")
+	flag.BoolVar(&masque, "masque", false, "register a MASQUE tunnel and print a usque config.json")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-p] <team-name>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-p] [-m] <team-name>\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -30,19 +36,23 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := run(flag.Arg(0), prompt); err != nil {
+	if err := run(flag.Arg(0), prompt, masque); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(team string, prompt bool) error {
+func run(team string, prompt, masque bool) error {
 	if !validTeamName(team) {
 		return fmt.Errorf("invalid team name: %q", team)
 	}
 	stdin := bufio.NewReader(os.Stdin)
 
-	privkey, err := getWGPrivkey(stdin, prompt)
+	newKey := newWireGuardKey
+	if masque {
+		newKey = newMASQUEKey
+	}
+	key, err := newKey(stdin, prompt)
 	if err != nil {
 		return err
 	}
@@ -51,13 +61,77 @@ func run(team string, prompt bool) error {
 		return fmt.Errorf("failed to get jwt token: %w", err)
 	}
 
-	wgConfig, err := register(privkey, token)
+	result, err := register(key.publicKey, key.keyType, key.tunnelType, token)
+	if err != nil {
+		return err
+	}
+	profile, err := key.profile(result)
 	if err != nil {
 		return err
 	}
 
-	fmt.Print(wgConfig)
+	fmt.Print(profile)
 	return nil
+}
+
+// tunnelKey is a local tunnel key together with how to enroll it and how
+// to render the resulting registration.
+type tunnelKey struct {
+	publicKey  string // base64, in the encoding key_type requires
+	keyType    string
+	tunnelType string
+	profile    func(*registrationResult) (string, error)
+}
+
+func newWireGuardKey(stdin *bufio.Reader, prompt bool) (*tunnelKey, error) {
+	privkey, err := getWGPrivkey(stdin, prompt)
+	if err != nil {
+		return nil, err
+	}
+	return &tunnelKey{
+		publicKey:  base64.StdEncoding.EncodeToString(privkey.PublicKey().Bytes()),
+		keyType:    "curve25519",
+		tunnelType: "wireguard",
+		profile: func(r *registrationResult) (string, error) {
+			c, err := r.toWGConfig(privkey)
+			if err != nil {
+				return "", err
+			}
+			return c.String(), nil
+		},
+	}, nil
+}
+
+func newMASQUEKey(stdin *bufio.Reader, prompt bool) (*tunnelKey, error) {
+	privkey, err := getMASQUEPrivkey(stdin, prompt)
+	if err != nil {
+		return nil, err
+	}
+	spki, err := x509.MarshalPKIXPublicKey(&privkey.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode public key: %w", err)
+	}
+	return &tunnelKey{
+		publicKey:  base64.StdEncoding.EncodeToString(spki),
+		keyType:    "secp256r1",
+		tunnelType: "masque",
+		profile: func(r *registrationResult) (string, error) {
+			c, err := r.toUsqueConfig(privkey)
+			if err != nil {
+				return "", err
+			}
+			out, err := json.MarshalIndent(c, "", "  ")
+			if err != nil {
+				return "", err
+			}
+			fmt.Fprintf(os.Stderr, "Connect with usque using -s %s", masqueSNI)
+			if c.Port != 443 {
+				fmt.Fprintf(os.Stderr, " -P %d", c.Port)
+			}
+			fmt.Fprintln(os.Stderr)
+			return string(out) + "\n", nil
+		},
+	}, nil
 }
 
 // validTeamName reports whether s can be a Zero Trust team name
@@ -94,6 +168,28 @@ func getWGPrivkey(stdin *bufio.Reader, prompt bool) (*ecdh.PrivateKey, error) {
 	privkey, err := ecdh.X25519().NewPrivateKey(raw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse wireguard private key: %w", err)
+	}
+	return privkey, nil
+}
+
+// getMASQUEPrivkey generates a P-256 key, or reads one in usque's encoding:
+// base64 of the SEC 1 DER private key.
+func getMASQUEPrivkey(stdin *bufio.Reader, prompt bool) (*ecdsa.PrivateKey, error) {
+	if !prompt {
+		return ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	}
+	fmt.Fprintln(os.Stderr, "Paste your base64 SEC 1 DER P-256 private key and press enter:")
+	line, err := stdin.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read from stdin: %w", err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(line))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse masque private key: %w", err)
+	}
+	privkey, err := x509.ParseECPrivateKey(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse masque private key: %w", err)
 	}
 	return privkey, nil
 }

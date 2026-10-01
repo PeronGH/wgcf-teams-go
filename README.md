@@ -34,8 +34,17 @@ encodings, and alternative endpoints and ports advertised by Cloudflare.
 The token expires 60 seconds after login — paste it promptly. If registration
 fails with an expiry error, refresh the success page and copy a fresh one.
 
-Pass `-p` / `--prompt` to supply your own WireGuard private key instead of
-generating one.
+Pass `-m` / `--masque` to register a MASQUE tunnel instead and print a
+[usque](https://github.com/Diniboy1123/usque) `config.json`:
+
+```
+wgcf-teams-go -m <team-name> > config.json
+usque -c config.json socks -s zt-masque.cloudflareclient.com
+```
+
+Pass `-p` / `--prompt` to supply your own private key instead of generating
+one: a base64 WireGuard key, or with `-m` a base64 SEC 1 DER P-256 key (usque's
+`private_key` encoding).
 
 > An automatic, paste-free flow is not possible: Cloudflare delivers the token
 > only through the fixed `com.cloudflare.warp://` custom URL scheme, which the
