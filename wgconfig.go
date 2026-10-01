@@ -23,7 +23,7 @@ type wireGuardConfig struct {
 	EndpointV4    netip.AddrPort
 	EndpointV6    netip.AddrPort
 	EndpointHost  string
-	AltPorts      []int
+	AltPorts      []uint16
 }
 
 func (c *wireGuardConfig) String() string {
@@ -52,11 +52,13 @@ func (c *wireGuardConfig) String() string {
 	b.WriteString("PersistentKeepalive = 25\n")
 	fmt.Fprintf(&b, "Endpoint = %s\n", c.EndpointV4)
 	fmt.Fprintf(&b, "#Endpoint = %s\n", c.EndpointV6)
-	fmt.Fprintf(&b, "#Endpoint = %s\n", c.EndpointHost)
+	if c.EndpointHost != "" {
+		fmt.Fprintf(&b, "#Endpoint = %s\n", c.EndpointHost)
+	}
 	if len(c.AltPorts) > 0 {
 		ports := make([]string, len(c.AltPorts))
 		for i, p := range c.AltPorts {
-			ports[i] = strconv.Itoa(p)
+			ports[i] = strconv.Itoa(int(p))
 		}
 		fmt.Fprintf(&b, "# the endpoint also listens on UDP %s\n", strings.Join(ports, ", "))
 	}

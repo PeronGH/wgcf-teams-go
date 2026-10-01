@@ -115,29 +115,3 @@ func TestResponseToWGProfile(t *testing.T) {
 		t.Errorf("unexpected profile:\n%s\nwant:\n%s", got, expectedProfile)
 	}
 }
-
-func TestAltEndpointPorts(t *testing.T) {
-	cases := []struct {
-		name  string
-		host  string
-		ports []int
-		want  []int
-	}{
-		{"excludes active port", "engage.cloudflareclient.com:2408", []int{2408, 500}, []int{500}},
-		{"host without port keeps all", "engage.cloudflareclient.com", []int{2408, 500}, []int{2408, 500}},
-		{"no ports advertised", "engage.cloudflareclient.com:2408", nil, nil},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := altEndpointPorts(c.host, c.ports)
-			if len(got) != len(c.want) {
-				t.Fatalf("got %v, want %v", got, c.want)
-			}
-			for i := range got {
-				if got[i] != c.want[i] {
-					t.Fatalf("got %v, want %v", got, c.want)
-				}
-			}
-		})
-	}
-}

@@ -7,22 +7,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/netip"
-	"strconv"
 	"strings"
 	"time"
 )
 
-const apiEndpoint = "https://zero-trust-client.cloudflareclient.com/v0i2308311933/reg"
+const (
+	apiEndpoint   = "https://api.devices.cloudflare.com/v0/reg"
+	userAgent     = "WARP for Linux"
+	clientVersion = "linux-2026.7.1377.0"
+)
 
+// registration mirrors the payload of the official Linux client. The
+// device identifiers are sent as explicit nulls, as that client does.
 type registration struct {
-	Key         string `json:"key"`
-	Tos         string `json:"tos"`
-	Model       string `json:"model"`
-	FCMToken    string `json:"fcm_token"`
-	DeviceToken string `json:"device_token"`
+	Type             string  `json:"type"`
+	Key              string  `json:"key"`
+	KeyType          string  `json:"key_type"`
+	TunnelType       string  `json:"tunnel_type"`
+	Tos              string  `json:"tos"`
+	MultiUserEnabled bool    `json:"multi_user_enabled"`
+	PhysicalDeviceID *string `json:"physical_device_id"`
+	HardwareID       *string `json:"hardware_id"`
 }
 
 // response is the subset of the Cloudflare API response the tool uses.
@@ -45,10 +52,10 @@ type warpConfig struct {
 	Peers    []struct {
 		PublicKey []byte `json:"public_key"`
 		Endpoint  struct {
-			Host  string `json:"host"`
-			V4    string `json:"v4"`
-			V6    string `json:"v6"`
-			Ports []int  `json:"ports"`
+			Host  string   `json:"host"`
+			V4    string   `json:"v4"`
+			V6    string   `json:"v6"`
+			Ports []uint16 `json:"ports"`
 		} `json:"endpoint"`
 	} `json:"peers"`
 	Interface struct {
@@ -63,9 +70,12 @@ type warpConfig struct {
 // response into a WireGuard config.
 func register(privkey *ecdh.PrivateKey, token string) (*wireGuardConfig, error) {
 	reg := registration{
-		Key:   base64.StdEncoding.EncodeToString(privkey.PublicKey().Bytes()),
-		Tos:   time.Now().Format(time.RFC3339Nano),
-		Model: "iPad13,8",
+		Type:             "linux",
+		Key:              base64.StdEncoding.EncodeToString(privkey.PublicKey().Bytes()),
+		KeyType:          "curve25519",
+		TunnelType:       "wireguard",
+		Tos:              time.Now().UTC().Format(time.RFC3339),
+		MultiUserEnabled: true,
 	}
 	body, err := json.Marshal(reg)
 	if err != nil {
@@ -78,10 +88,8 @@ func register(privkey *ecdh.PrivateKey, token string) (*wireGuardConfig, error) 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Cf-Access-Jwt-Assertion", strings.TrimSpace(token))
-	req.Header.Set("CF-Client-Version", "i-6.23-2308311933.1")
-	req.Header.Set("User-Agent", "1.1.1.1/6.23")
-	req.Header.Set("Accept", "*/*")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("CF-Client-Version", clientVersion)
+	req.Header.Set("User-Agent", userAgent)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -122,15 +130,13 @@ func (r *registrationResult) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardCon
 		return nil, fmt.Errorf("unexpected interface address families: v4=%s v6=%s", addrs.V4, addrs.V6)
 	}
 
-	// The v4/v6 endpoints come with port 0; the real port is in the host.
-	_, portStr, err := net.SplitHostPort(peer.Endpoint.Host)
-	if err != nil {
-		return nil, fmt.Errorf("endpoint host %q has no port: %w", peer.Endpoint.Host, err)
+	// The v4/v6 endpoints come with port 0; the candidate ports are listed
+	// separately, preferred first.
+	ports := peer.Endpoint.Ports
+	if len(ports) == 0 {
+		return nil, fmt.Errorf("cloudflare returned an endpoint with no ports")
 	}
-	port, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil {
-		return nil, fmt.Errorf("endpoint host %q has an invalid port: %w", peer.Endpoint.Host, err)
-	}
+	port := ports[0]
 	endpointV4, err := netip.ParseAddrPort(peer.Endpoint.V4)
 	if err != nil {
 		return nil, fmt.Errorf("invalid v4 endpoint %q: %w", peer.Endpoint.V4, err)
@@ -150,27 +156,11 @@ func (r *registrationResult) toWGConfig(privkey *ecdh.PrivateKey) (*wireGuardCon
 		Token:         r.Token,
 		ClientID:      [3]byte(c.ClientID),
 		PeerPublicKey: peer.PublicKey,
-		EndpointV4:    netip.AddrPortFrom(endpointV4.Addr(), uint16(port)),
-		EndpointV6:    netip.AddrPortFrom(endpointV6.Addr(), uint16(port)),
+		EndpointV4:    netip.AddrPortFrom(endpointV4.Addr(), port),
+		EndpointV6:    netip.AddrPortFrom(endpointV6.Addr(), port),
 		EndpointHost:  peer.Endpoint.Host,
-		AltPorts:      altEndpointPorts(peer.Endpoint.Host, peer.Endpoint.Ports),
+		AltPorts:      ports[1:],
 	}, nil
-}
-
-// altEndpointPorts returns the advertised endpoint ports, excluding the one
-// already used by the endpoint host.
-func altEndpointPorts(host string, ports []int) []int {
-	_, current, err := net.SplitHostPort(host)
-	if err != nil {
-		current = ""
-	}
-	var alt []int
-	for _, p := range ports {
-		if strconv.Itoa(p) != current {
-			alt = append(alt, p)
-		}
-	}
-	return alt
 }
 
 func prettyJSON(raw []byte) string {
