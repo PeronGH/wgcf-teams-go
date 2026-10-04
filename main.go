@@ -203,7 +203,7 @@ func getJWTToken(stdin *bufio.Reader, team string) (string, error) {
 	fmt.Fprintln(os.Stderr, "After login, open the browser console (F12) on the success page and run:")
 	fmt.Fprintln(os.Stderr, "  copy(document.getElementById('redirect-button').getAttribute('onclick'))")
 	fmt.Fprintln(os.Stderr, "That puts the login callback on your clipboard; paste it here within 60 seconds and press enter:")
-	line, err := stdin.ReadString('\n')
+	line, err := withLongLineInput(func() (string, error) { return stdin.ReadString('\n') })
 	if err != nil {
 		return "", err
 	}
