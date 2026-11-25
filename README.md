@@ -4,6 +4,8 @@ Generate WireGuard configurations for Cloudflare WARP for Teams (Zero Trust).
 
 ## Install
 
+Download a prebuilt binary from [Releases](https://github.com/PeronGH/wgcf-teams-go/releases), or install with Go:
+
 ```
 go install github.com/PeronGH/wgcf-teams-go@latest
 ```
