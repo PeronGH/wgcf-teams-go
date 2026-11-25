@@ -24,6 +24,6 @@ func withLongLineInput(read func() (string, error)) (string, error) {
 	if err := unix.IoctlSetTermios(fd, ioctlSetTermios, &raw); err != nil {
 		return "", err
 	}
-	defer unix.IoctlSetTermios(fd, ioctlSetTermios, orig)
+	defer func() { _ = unix.IoctlSetTermios(fd, ioctlSetTermios, orig) }()
 	return read()
 }
